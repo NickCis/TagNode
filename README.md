@@ -1,6 +1,6 @@
 Dependencies: taglib (c++ library)
 Node implementation of taglib.
-TODO: Async using libuv
+TODO: editing tags
 To compile, run
 
 ```
