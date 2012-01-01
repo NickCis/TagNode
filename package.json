@@ -1,0 +1,5 @@
+{
+    "name": "tagnode",
+    "version": "1.0.0",
+    "main": "./build/Release/tagnode"
+}
