@@ -41,23 +41,23 @@ void AsyncRead(uv_work_t* req) {
 		TagLib::Tag *tag = f.tag(); //Hay que hacer delete tag?
 
 		//TODO: These vars must be freed in destructor
-		baton->obj->_title = (char*) malloc(tag->title().size());
+		baton->obj->_title = (char*) malloc(tag->title().size()+1);
 		strcpy(baton->obj->_title, tag->title().toCString());
 
-		baton->obj->_artist = (char*) malloc(tag->artist().size());
+		baton->obj->_artist = (char*) malloc(tag->artist().size()+1);
 		strcpy(baton->obj->_artist, tag->artist().toCString());
 
-		baton->obj->_album = (char*) malloc(tag->album().size());
+		baton->obj->_album = (char*) malloc(tag->album().size()+1);
 		strcpy(baton->obj->_album, tag->album().toCString());
 
 		baton->obj->_year = tag->year();
 
-		baton->obj->_comment = (char*) malloc(tag->comment().size());
+		baton->obj->_comment = (char*) malloc(tag->comment().size()+1);
 		strcpy(baton->obj->_comment, tag->comment().toCString());
 
 		baton->obj->_track = tag->track();
 
-		baton->obj->_genre = (char*) malloc(tag->genre().size());
+		baton->obj->_genre = (char*) malloc(tag->genre().size()+1);
 		strcpy(baton->obj->_genre, tag->genre().toCString());
 	}
 
