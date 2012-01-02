@@ -13,7 +13,7 @@ To compile, run
 
 Todo:
 
-    * Code Destructors of clases and free vars
+* Code Destructors of clases and free vars
 
 ## Documentation ##
 
