@@ -30,7 +30,7 @@ struct Baton {
 // will crash randomly and you'll have a lot of fun debugging.
 // If you want to use parameters passed into the original call, you have to
 // convert them to PODs or some other fancy method.
-void AsyncWork(uv_work_t* req) {
+void AsyncRead(uv_work_t* req) {
 	Baton* baton = static_cast<Baton*>(req->data);
 
 	// Do work in threadpool here.
@@ -59,7 +59,6 @@ void AsyncWork(uv_work_t* req) {
 
 		baton->obj->_genre = (char*) malloc(tag->genre().size());
 		strcpy(baton->obj->_genre, tag->genre().toCString());
-
 	}
 
 	baton->obj->_audioProperties = !f.isNull() && f.audioProperties();
@@ -82,7 +81,7 @@ void AsyncWork(uv_work_t* req) {
 
 // This function is executed in the main V8/JavaScript thread. That means it's
 // safe to use V8 functions again. Don't forget the HandleScope!
-void AsyncAfter(uv_work_t* req) {
+void AsyncReadAfter(uv_work_t* req) {
 	HandleScope scope;
 	Baton* baton = static_cast<Baton*>(req->data);
 
@@ -149,6 +148,90 @@ void AsyncAfter(uv_work_t* req) {
 	delete baton;
 }
 
+void AsyncWrite(uv_work_t* req) {
+	Baton* baton = static_cast<Baton*>(req->data);
+	// Do work in threadpool here.
+	TagLib::FileRef f(baton->obj->_path);
+
+	if(!f.isNull() && f.tag()) {
+		TagLib::Tag *t = f.tag();
+
+		if (baton->obj->fTitle)
+			t->setTitle(baton->obj->_title);
+		if (baton->obj->fArtist)
+			t->setArtist(baton->obj->_artist);
+		if (baton->obj->fAlbum)
+			t->setAlbum(baton->obj->_album);
+		if (baton->obj->fYear)
+			t->setYear(baton->obj->_year);
+		if (baton->obj->fComment)
+			t->setComment(baton->obj->_comment);
+		if (baton->obj->fTrack)
+			t->setTrack(baton->obj->_track);
+		if (baton->obj->fGenre)
+			t->setGenre(baton->obj->_genre);
+
+		baton->obj->fTitle = false;
+		baton->obj->fArtist = false;
+		baton->obj->fAlbum = false;
+		baton->obj->fYear = false;
+		baton->obj->fComment = false;
+		baton->obj->fTrack = false;
+		baton->obj->fGenre = false;
+
+		f.file()->save();
+
+	} else {
+		//error
+	}
+}
+
+void AsyncWriteAfter(uv_work_t* req) {
+	HandleScope scope;
+	Baton* baton = static_cast<Baton*>(req->data);
+
+	if (baton->error) { //TODO: Handle error
+		Local<Value> err = Exception::Error(String::New(baton->error_message.c_str()));
+
+		// Prepare the parameters for the callback function.
+		const unsigned argc = 1;
+		Local<Value> argv[argc] = { err };
+
+		// Wrap the callback function call in a TryCatch so that we can call
+		// node's FatalException afterwards. This makes it possible to catch
+		// the exception from JavaScript land using the
+		// process.on('uncaughtException') event.
+		TryCatch try_catch;
+		baton->callback->Call(Context::GetCurrent()->Global(), argc, argv);
+		if (try_catch.HasCaught()) {
+			node::FatalException(try_catch);
+		}
+	} else {
+		// In case the operation succeeded, convention is to pass null as the
+		// first argument before the result arguments.
+		// In case you produced more complex data, this is the place to convert
+		// your plain C++ data structures into JavaScript/V8 data structures.
+		const unsigned argc = 1;
+		Local<Value> argv[argc] = {
+			Local<Value>::New(Null()),
+		};
+
+		// Wrap the callback function call in a TryCatch so that we can call
+		// node's FatalException afterwards. This makes it possible to catch
+		// the exception from JavaScript land using the
+		// process.on('uncaughtException') event.
+		TryCatch try_catch;
+		baton->callback->Call(Context::GetCurrent()->Global(), argc, argv);
+		if (try_catch.HasCaught()) {
+			node::FatalException(try_catch);
+		}
+	}
+
+	// The callback is a permanent handle, so we have to dispose of it manually.
+	baton->callback.Dispose();
+	delete baton;
+}
+
 
 Persistent<FunctionTemplate> TagNode::constructor;
 
@@ -165,6 +248,7 @@ void TagNode::Init(Handle<Object> target) {
 
 	// Add all prototype methods, getters and setters here.
 	NODE_SET_PROTOTYPE_METHOD(constructor, "read", Read);
+	NODE_SET_PROTOTYPE_METHOD(constructor, "write", Write);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "path", Path);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "tag", Tag);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "audioProperties", AudioProperties);
@@ -212,6 +296,15 @@ Handle<Value> TagNode::New(const Arguments& args) {
 	strcpy(cStr, *v8Str);
 	//TagNode* obj = new TagNode(args[0]->ToString());
 	TagNode* obj = new TagNode(cStr);
+
+	obj->fTitle = false;
+	obj->fArtist = false;
+	obj->fAlbum = false;
+	obj->fYear = false;
+	obj->fComment = false;
+	obj->fTrack = false;
+	obj->fGenre = false;
+
 	obj->Wrap(args.This());
 
 	return args.This();
@@ -239,7 +332,36 @@ Handle<Value> TagNode::Read(const Arguments& args) {
 	// Schedule our work request with libuv. Here you can specify the functions
 	// that should be executed in the threadpool and back in the main thread
 	// after the threadpool function completed.
-	int status = uv_queue_work(uv_default_loop(), &baton->request, AsyncWork, AsyncAfter);
+	int status = uv_queue_work(uv_default_loop(), &baton->request, AsyncRead, AsyncReadAfter);
+	assert(status == 0);
+
+	//FIXME: should't we use scope.Close()?
+	return Undefined();
+}
+
+Handle<Value> TagNode::Write(const Arguments& args) {
+	HandleScope scope;
+
+	if (!args[0]->IsFunction()) {
+		return ThrowException(Exception::TypeError(
+			String::New("First argument must be a callback function")));
+	}
+
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(args.This());
+
+	// There's no ToFunction(), use a Cast instead.
+	Local<Function> callback = Local<Function>::Cast(args[0]);
+
+	// This creates our work request, including the libuv struct.
+	Baton* baton = new Baton();
+	baton->request.data = baton;
+	baton->callback = Persistent<Function>::New(callback);
+	baton->obj = obj;
+
+	// Schedule our work request with libuv. Here you can specify the functions
+	// that should be executed in the threadpool and back in the main thread
+	// after the threadpool function completed.
+	int status = uv_queue_work(uv_default_loop(), &baton->request, AsyncWrite, AsyncWriteAfter);
 	assert(status == 0);
 
 	//FIXME: should't we use scope.Close()?
@@ -270,6 +392,7 @@ void TagNode::SetTitle(Local<String> property, Local<Value> value, const Accesso
 	v8::String::AsciiValue v8Str(value);
 	obj->_title = (char*) malloc(strlen(*v8Str) + 1);
 	strcpy(obj->_title, *v8Str);
+	obj->fTitle = true;
 }
 
 Handle<Value> TagNode::GetArtist(Local<String> property, const AccessorInfo& info) {
@@ -287,6 +410,7 @@ void TagNode::SetArtist(Local<String> property, Local<Value> value, const Access
 	v8::String::AsciiValue v8Str(value);
 	obj->_artist = (char*) malloc(strlen(*v8Str) + 1);
 	strcpy(obj->_artist, *v8Str);
+	obj->fArtist = true;
 }
 
 Handle<Value> TagNode::GetAlbum(Local<String> property, const AccessorInfo& info) {
@@ -304,6 +428,7 @@ void TagNode::SetAlbum(Local<String> property, Local<Value> value, const Accesso
 	v8::String::AsciiValue v8Str(value);
 	obj->_album = (char*) malloc(strlen(*v8Str) + 1);
 	strcpy(obj->_album, *v8Str);
+	obj->fAlbum = true;
 }
 
 Handle<Value> TagNode::GetYear(Local<String> property, const AccessorInfo& info) {
@@ -318,6 +443,7 @@ void TagNode::SetYear(Local<String> property, Local<Value> value, const Accessor
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
 	obj->_year = value->ToInteger()->Value();
+	obj->fYear = true;
 }
 
 Handle<Value> TagNode::GetComment(Local<String> property, const AccessorInfo& info) {
@@ -335,6 +461,7 @@ void TagNode::SetComment(Local<String> property, Local<Value> value, const Acces
 	v8::String::AsciiValue v8Str(value);
 	obj->_comment = (char*) malloc(strlen(*v8Str) + 1);
 	strcpy(obj->_comment, *v8Str);
+	obj->fComment = true;
 }
 
 Handle<Value> TagNode::GetTrack(Local<String> property, const AccessorInfo& info) {
@@ -349,6 +476,7 @@ void TagNode::SetTrack(Local<String> property, Local<Value> value, const Accesso
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
 	obj->_track = value->ToInteger()->Value();
+	obj->fTrack = true;
 }
 
 Handle<Value> TagNode::GetGenre(Local<String> property, const AccessorInfo& info) {
@@ -366,6 +494,7 @@ void TagNode::SetGenre(Local<String> property, Local<Value> value, const Accesso
 	v8::String::AsciiValue v8Str(value);
 	obj->_genre = (char*) malloc(strlen(*v8Str) + 1);
 	strcpy(obj->_genre, *v8Str);
+	obj->fGenre = true;
 }
 
 Handle<Value> TagNode::GetBitrate(Local<String> property, const AccessorInfo& info) {
@@ -380,6 +509,7 @@ void TagNode::SetBitrate(Local<String> property, Local<Value> value, const Acces
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
 	obj->_bitrate = value->ToNumber()->Value();
+	obj->fBitrate = true;
 }
 
 Handle<Value> TagNode::GetSamplerate(Local<String> property, const AccessorInfo& info) {
@@ -394,6 +524,7 @@ void TagNode::SetSamplerate(Local<String> property, Local<Value> value, const Ac
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
 	obj->_samplerate = value->ToNumber()->Value();
+	obj->fSamplerate = true;
 }
 
 Handle<Value> TagNode::GetChannels(Local<String> property, const AccessorInfo& info) {
@@ -408,6 +539,7 @@ void TagNode::SetChannels(Local<String> property, Local<Value> value, const Acce
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
 	obj->_channels = value->ToInteger()->Value();
+	obj->fChannels = true;
 }
 
 Handle<Value> TagNode::GetLength(Local<String> property, const AccessorInfo& info) {
@@ -422,6 +554,7 @@ void TagNode::SetLength(Local<String> property, Local<Value> value, const Access
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
 	obj->_length = value->ToInteger()->Value();
+	obj->fLength = true;
 }
 
 Handle<Value> TagNode::Tag(const Arguments& args) {

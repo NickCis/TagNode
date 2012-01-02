@@ -2,7 +2,7 @@
 #define TAGNODE_HPP
 
 //#include <iostream>
-#include <stdio.h>
+//#include <stdio.h>
 
 #include <node.h>
 
@@ -19,8 +19,11 @@
 
 
 // Forward declaration.
-void AsyncWork(uv_work_t* req);
-void AsyncAfter(uv_work_t* req);
+void AsyncRead(uv_work_t* req);
+void AsyncReadAfter(uv_work_t* req);
+
+void AsyncWrite(uv_work_t* req);
+void AsyncWriteAfter(uv_work_t* req);
 
 // We use a struct to store information about the asynchronous "work request".
 struct Baton;
@@ -83,11 +86,24 @@ public:
 	int _channels;
 	int _length;
 
+	bool fTitle;// = false;
+	bool fArtist;// = false;
+	bool fAlbum;// = false;
+	bool fYear;// = false;
+	bool fComment;// = false;
+	bool fTrack;// = false;
+	bool fGenre;// = false;
+	bool fBitrate;// = false;
+	bool fSamplerate;// = false;
+	bool fChannels;// = false;
+	bool fLength;// = false;
+
 protected:
     TagNode(char *path);
 
     static v8::Handle<v8::Value> New(const v8::Arguments& args);
     static v8::Handle<v8::Value> Read(const v8::Arguments& args);
+    static v8::Handle<v8::Value> Write(const v8::Arguments& args);
     static v8::Handle<v8::Value> Path(const v8::Arguments& args);
     static v8::Handle<v8::Value> Tag(const v8::Arguments& args);
     static v8::Handle<v8::Value> AudioProperties(const v8::Arguments& args);
