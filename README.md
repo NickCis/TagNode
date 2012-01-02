@@ -51,9 +51,10 @@ Where [function] is a function to be executed after writing the tags to the file
 
 ## Version
 Version 1.0, tested with:
-    * node 0.6.6
-    * taglib 1.7-3
-    * Arch Linux
+
+* node 0.6.6
+* taglib 1.7-3
+* Arch Linux
 
 ## Example ##
 
