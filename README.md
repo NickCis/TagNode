@@ -1,4 +1,4 @@
-# TabNode #
+# TagNode #
 Async node.js implementation of the taglib c++ library.
 Dependencies: taglib (c++ library)
 These node wrapper is capable of:
@@ -10,10 +10,15 @@ To compile, run
     node-waf configure
     node-waf build
 
+Todo:
+    * Code Destructors of clases and free vars
+
 ## Documentation ##
+Creating a TagNodeObject:
     new [TagNodeModule].TagNode([Path]);
 Where [Path] is the path of the file. Retrives a new TagNode object
 
+Reading Tags:
     [TagNodeObj].read([function(err, dat)]);
 Where [function] is a function to be executed after getting the tags. Two arguments are passed to the function, err and dat. Err is the status error (null if everything is OK), dat is a dictiory with the tag information. Dat has the following format:
 
@@ -34,14 +39,15 @@ Where [function] is a function to be executed after getting the tags. Two argume
          length: 349
     }
 
+Writing Tags:
     [TagNodeObj].write([function(err)]);
 Where [function] is a function to be executed after writing the tags to the file. One argument is passed, err. Err is the status error (null if everything is OK);
 
 ## Version
 Version 1.0, tested with:
-    - node 0.6.6
-    - taglib 1.7-3
-    - Arch Linux
+    * node 0.6.6
+    * taglib 1.7-3
+    * Arch Linux
 
 ## Example ##
 
