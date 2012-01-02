@@ -62,14 +62,14 @@ void AsyncWork(uv_work_t* req) {
 
 	}
 
-	baton->obj->audioProperties = !f.isNull() && f.audioProperties();
-	if(baton->obj->audioProperties) {
+	baton->obj->_audioProperties = !f.isNull() && f.audioProperties();
+	if(baton->obj->_audioProperties) {
 
 		TagLib::AudioProperties *properties = f.audioProperties(); //Hay que hacer delete properties?
 
 		//TODO: These vars must be freed in destructor
 		baton->obj->_bitrate = properties->bitrate();
-		baton->obj->_sample_rate = properties->sampleRate();
+		baton->obj->_samplerate = properties->sampleRate();
 		baton->obj->_channels = properties->channels();
 		baton->obj->_length = properties->length();
 	}
@@ -103,6 +103,25 @@ void AsyncAfter(uv_work_t* req) {
 			node::FatalException(try_catch);
 		}
 	} else {
+		Local<Object> retobj = Object::New();
+		if (baton->obj->_tag) {
+			retobj->Set(String::New("tag"), Boolean::New(baton->obj->_tag));
+			retobj->Set(String::New("title"), String::New(baton->obj->_title));
+			retobj->Set(String::New("path"), String::New(baton->obj->_path));
+			retobj->Set(String::New("artist"), String::New(baton->obj->_artist));
+			retobj->Set(String::New("album"), String::New(baton->obj->_album));
+			retobj->Set(String::New("year"), Integer::New(baton->obj->_year));
+			retobj->Set(String::New("comment"), String::New(baton->obj->_comment));
+			retobj->Set(String::New("track"), Integer::New(baton->obj->_track));
+			retobj->Set(String::New("genre"), String::New(baton->obj->_genre));
+		}
+		if (baton->obj->_audioProperties) {
+			retobj->Set(String::New("audioProperties"), Boolean::New(baton->obj->_audioProperties));
+			retobj->Set(String::New("bitrate"), Number::New(baton->obj->_bitrate));
+			retobj->Set(String::New("sample_rate"), Number::New(baton->obj->_samplerate));
+			retobj->Set(String::New("channels"), Integer::New(baton->obj->_channels));
+			retobj->Set(String::New("length"), Integer::New(baton->obj->_length));
+		}
 		// In case the operation succeeded, convention is to pass null as the
 		// first argument before the result arguments.
 		// In case you produced more complex data, this is the place to convert
@@ -111,7 +130,7 @@ void AsyncAfter(uv_work_t* req) {
 		//TODO: aprender como pasar de un struct a un objeto de js
 		Local<Value> argv[argc] = {
 			Local<Value>::New(Null()),
-			Local<Value>::New(Integer::New(1))
+			retobj
 		};
 
 		// Wrap the callback function call in a TryCatch so that we can call
@@ -147,24 +166,27 @@ void TagNode::Init(Handle<Object> target) {
 	// Add all prototype methods, getters and setters here.
 	NODE_SET_PROTOTYPE_METHOD(constructor, "read", Read);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "path", Path);
-	//NODE_SET_PROTOTYPE_METHOD(constructor, "title", Title);
-	//NODE_SET_PROTOTYPE_METHOD(constructor, "artist", Artist);
-	NODE_SET_PROTOTYPE_METHOD(constructor, "album", Album);
-	NODE_SET_PROTOTYPE_METHOD(constructor, "year", Year);
-	NODE_SET_PROTOTYPE_METHOD(constructor, "comment", Comment);
-	NODE_SET_PROTOTYPE_METHOD(constructor, "track", Track);
-	NODE_SET_PROTOTYPE_METHOD(constructor, "genre", Genre);
+	NODE_SET_PROTOTYPE_METHOD(constructor, "tag", Tag);
+	NODE_SET_PROTOTYPE_METHOD(constructor, "audioProperties", AudioProperties);
 
 	//Properties
 	constructor->InstanceTemplate()->SetAccessor(String::New("title"), GetTitle, SetTitle);
 	constructor->InstanceTemplate()->SetAccessor(String::New("artist"), GetArtist, SetArtist);
+	constructor->InstanceTemplate()->SetAccessor(String::New("album"), GetAlbum, SetAlbum);
+	constructor->InstanceTemplate()->SetAccessor(String::New("year"), GetYear, SetYear);
+	constructor->InstanceTemplate()->SetAccessor(String::New("comment"), GetComment, SetArtist);
+	constructor->InstanceTemplate()->SetAccessor(String::New("track"), GetTrack, SetTrack);
+	constructor->InstanceTemplate()->SetAccessor(String::New("genre"), GetGenre, SetGenre);
+	constructor->InstanceTemplate()->SetAccessor(String::New("bitrate"), GetBitrate, SetBitrate);
+	constructor->InstanceTemplate()->SetAccessor(String::New("samplerate"), GetSamplerate, SetSamplerate);
+	constructor->InstanceTemplate()->SetAccessor(String::New("channels"), GetChannels, SetChannels);
+	constructor->InstanceTemplate()->SetAccessor(String::New("length"), GetLength, SetLength);
 
 	// This has to be last, otherwise the properties won't show up on the
 	// object in JavaScript.
 	target->Set(name, constructor->GetFunction());
 }
 
-//TagNode::TagNode(Local<String> path)
 TagNode::TagNode(char *path)
 	: ObjectWrap(),
 	_path(path) {}
@@ -185,7 +207,7 @@ Handle<Value> TagNode::New(const Arguments& args) {
 	}
 
 	v8::String::AsciiValue v8Str(args[0]);
-	//TODO: cStr must be free in the destructor
+	//TODO: cStr (TagNode->_path) must be free in the destructor
 	char *cStr = (char*) malloc(strlen(*v8Str) + 1);
 	strcpy(cStr, *v8Str);
 	//TagNode* obj = new TagNode(args[0]->ToString());
@@ -194,8 +216,6 @@ Handle<Value> TagNode::New(const Arguments& args) {
 
 	return args.This();
 }
-
-
 
 Handle<Value> TagNode::Read(const Arguments& args) {
 	HandleScope scope;
@@ -222,57 +242,9 @@ Handle<Value> TagNode::Read(const Arguments& args) {
 	int status = uv_queue_work(uv_default_loop(), &baton->request, AsyncWork, AsyncAfter);
 	assert(status == 0);
 
+	//FIXME: should't we use scope.Close()?
 	return Undefined();
 }
-
-
-/*Handle<Value> TagNode::Read(const Arguments& args) {
-	HandleScope scope;
-
-	// Retrieves the pointer to the wrapped object instance.
-	TagNode* obj = ObjectWrap::Unwrap<TagNode>(args.This());
-
-	TagLib::FileRef f(obj->_path); //Hay que hacer delete f?
-
-	if(!f.isNull() && f.tag()) {
-		TagLib::Tag *tag = f.tag();
-
-		//TODO: These vars must be freed in destructor
-		obj->_title = (char*) malloc(tag->title().size());
-		strcpy(obj->_title, tag->title().toCString());
-
-		obj->_artist = (char*) malloc(tag->artist().size());
-		strcpy(obj->_artist, tag->artist().toCString());
-
-		obj->_album = (char*) malloc(tag->album().size());
-		strcpy(obj->_album, tag->album().toCString());
-
-		obj->_year = tag->year();
-
-		obj->_comment = (char*) malloc(tag->comment().size());
-		strcpy(obj->_comment, tag->comment().toCString());
-
-		obj->_track = tag->track();
-
-		obj->_genre = (char*) malloc(tag->genre().size());
-		strcpy(obj->_genre, tag->genre().toCString());
-
-	}
-
-	if(!f.isNull() && f.audioProperties()) {
-
-		TagLib::AudioProperties *properties = f.audioProperties();
-
-		//TODO: These vars must be freed in destructor
-		obj->_bitrate = properties->bitrate();
-		obj->_sample_rate = properties->sampleRate();
-		obj->_channels = properties->channels();
-		obj->length = properties->length();
-	}
-
-	return scope.Close(Boolean::New(1));
-}*/
-
 
 Handle<Value> TagNode::Path(const Arguments& args) {
 	HandleScope scope;
@@ -281,64 +253,189 @@ Handle<Value> TagNode::Path(const Arguments& args) {
 	//return scope.Close(obj->_path);
 	return scope.Close(String::New(obj->_path));
 }
-/*Handle<Value> TagNode::Title(const Arguments& args) {
-	HandleScope scope;
-	TagNode* obj = ObjectWrap::Unwrap<TagNode>(args.This());
-	return scope.Close(String::New(obj->_title));
-}*/
 
 /* Setters & getters of js props*/
 Handle<Value> TagNode::GetTitle(Local<String> property, const AccessorInfo& info) {
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
-	return scope.Close(String::New(obj->_title));
+	if (obj->_tag)
+		return scope.Close(String::New(obj->_title));
+	else //FIXME: should't we use scope.Close()?
+		return Undefined();
 }
 void TagNode::SetTitle(Local<String> property, Local<Value> value, const AccessorInfo& info) {
-	HandleScope scope;//TODO:
-	//unwrapTag(info)->tag->setTitle(NodeStringToTagLibString(value));
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	free(obj->_title);
+	v8::String::AsciiValue v8Str(value);
+	obj->_title = (char*) malloc(strlen(*v8Str) + 1);
+	strcpy(obj->_title, *v8Str);
 }
+
 Handle<Value> TagNode::GetArtist(Local<String> property, const AccessorInfo& info) {
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
-	return scope.Close(String::New(obj->_artist));
+	if (obj->_tag)
+		return scope.Close(String::New(obj->_artist));
+	else //FIXME: should't we use scope.Close()?
+		return Undefined();
 }
 void TagNode::SetArtist(Local<String> property, Local<Value> value, const AccessorInfo& info) {
-	HandleScope scope;//TODO:
-	//unwrapTag(info)->tag->setTitle(NodeStringToTagLibString(value));
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	free(obj->_artist);
+	v8::String::AsciiValue v8Str(value);
+	obj->_artist = (char*) malloc(strlen(*v8Str) + 1);
+	strcpy(obj->_artist, *v8Str);
 }
-//TODO: All setters & getters of js props
 
+Handle<Value> TagNode::GetAlbum(Local<String> property, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	if (obj->_tag)
+		return scope.Close(String::New(obj->_album));
+	else //FIXME: should't we use scope.Close()?
+		return Undefined();
+}
+void TagNode::SetAlbum(Local<String> property, Local<Value> value, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	free(obj->_album);
+	v8::String::AsciiValue v8Str(value);
+	obj->_album = (char*) malloc(strlen(*v8Str) + 1);
+	strcpy(obj->_album, *v8Str);
+}
 
-Handle<Value> TagNode::Album(const Arguments& args) {
+Handle<Value> TagNode::GetYear(Local<String> property, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	if (obj->_tag)
+		return scope.Close(Integer::New(obj->_year));
+	else //FIXME: should't we use scope.Close()?
+		return Undefined();
+}
+void TagNode::SetYear(Local<String> property, Local<Value> value, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	obj->_year = value->ToInteger()->Value();
+}
+
+Handle<Value> TagNode::GetComment(Local<String> property, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	if (obj->_tag)
+		return scope.Close(String::New(obj->_comment));
+	else //FIXME: should't we use scope.Close()?
+		return Undefined();
+}
+void TagNode::SetComment(Local<String> property, Local<Value> value, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	free(obj->_comment);
+	v8::String::AsciiValue v8Str(value);
+	obj->_comment = (char*) malloc(strlen(*v8Str) + 1);
+	strcpy(obj->_comment, *v8Str);
+}
+
+Handle<Value> TagNode::GetTrack(Local<String> property, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	if (obj->_tag)
+		return scope.Close(Integer::New(obj->_track));
+	else //FIXME: should't we use scope.Close()?
+		return Undefined();
+}
+void TagNode::SetTrack(Local<String> property, Local<Value> value, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	obj->_track = value->ToInteger()->Value();
+}
+
+Handle<Value> TagNode::GetGenre(Local<String> property, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	if (obj->_tag)
+		return scope.Close(String::New(obj->_genre));
+	else //FIXME: should't we use scope.Close()?
+		return Undefined();
+}
+void TagNode::SetGenre(Local<String> property, Local<Value> value, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	free(obj->_genre);
+	v8::String::AsciiValue v8Str(value);
+	obj->_genre = (char*) malloc(strlen(*v8Str) + 1);
+	strcpy(obj->_genre, *v8Str);
+}
+
+Handle<Value> TagNode::GetBitrate(Local<String> property, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	if (obj->_tag)
+		return scope.Close(Number::New(obj->_bitrate));
+	else //FIXME: should't we use scope.Close()?
+		return Undefined();
+}
+void TagNode::SetBitrate(Local<String> property, Local<Value> value, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	obj->_bitrate = value->ToNumber()->Value();
+}
+
+Handle<Value> TagNode::GetSamplerate(Local<String> property, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	if (obj->_tag)
+		return scope.Close(Number::New(obj->_samplerate));
+	else //FIXME: should't we use scope.Close()?
+		return Undefined();
+}
+void TagNode::SetSamplerate(Local<String> property, Local<Value> value, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	obj->_samplerate = value->ToNumber()->Value();
+}
+
+Handle<Value> TagNode::GetChannels(Local<String> property, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	if (obj->_tag)
+		return scope.Close(Integer::New(obj->_channels));
+	else //FIXME: should't we use scope.Close()?
+		return Undefined();
+}
+void TagNode::SetChannels(Local<String> property, Local<Value> value, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	obj->_channels = value->ToInteger()->Value();
+}
+
+Handle<Value> TagNode::GetLength(Local<String> property, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	if (obj->_tag)
+		return scope.Close(Integer::New(obj->_length));
+	else //FIXME: should't we use scope.Close()?
+		return Undefined();
+}
+void TagNode::SetLength(Local<String> property, Local<Value> value, const AccessorInfo& info) {
+	HandleScope scope;
+	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
+	obj->_length = value->ToInteger()->Value();
+}
+
+Handle<Value> TagNode::Tag(const Arguments& args) {
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(args.This());
-	return scope.Close(String::New(obj->_album));
+	return scope.Close(Boolean::New(obj->_tag));
 }
-Handle<Value> TagNode::Year(const Arguments& args) {
+Handle<Value> TagNode::AudioProperties(const Arguments& args) {
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(args.This());
-	return scope.Close(Integer::New(obj->_year));
-}
-Handle<Value> TagNode::Comment(const Arguments& args) {
-	HandleScope scope;
-	TagNode* obj = ObjectWrap::Unwrap<TagNode>(args.This());
-	return scope.Close(String::New(obj->_comment));
-}
-Handle<Value> TagNode::Track(const Arguments& args) {
-	HandleScope scope;
-	TagNode* obj = ObjectWrap::Unwrap<TagNode>(args.This());
-	return scope.Close(Integer::New(obj->_track));
-}
-Handle<Value> TagNode::Genre(const Arguments& args) {
-	HandleScope scope;
-	TagNode* obj = ObjectWrap::Unwrap<TagNode>(args.This());
-	return scope.Close(String::New(obj->_genre));
+	return scope.Close(Boolean::New(obj->_audioProperties));
 }
 
-
-
-
-
+//Register the module.
 void RegisterModule(Handle<Object> target) {
 	TagNode::Init(target);
 }
