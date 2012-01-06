@@ -30,8 +30,8 @@ struct Baton;
 
 class TagNode : public node::ObjectWrap {
 public:
-	~TagNode() {
-		//FIXME: Is it correct to do this?
+	~TagNode() { // TODO: Find out how to destroy & erase memory
+/*		//FIXME: Is it correct to do this?
 		if (_title != NULL)
 			free(_title);
 		if (_artist != NULL)
@@ -42,7 +42,7 @@ public:
 			free(_comment);
 		if (_genre != NULL)
 			free(_genre);
-		free(_path);
+		free(_path);*/
 	};
 
 	static v8::Persistent<v8::FunctionTemplate> constructor;
