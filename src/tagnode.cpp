@@ -273,7 +273,20 @@ void TagNode::Init(Handle<Object> target) {
 
 TagNode::TagNode(char *path)
 	: ObjectWrap(),
-	_path(path) {}
+	_path(path) {
+		fTitle = false;
+		fArtist = false;
+		fAlbum = false;
+		fYear = false;
+		fComment = false;
+		fTrack = false;
+		fGenre = false;
+		_title = NULL;
+		_artist = NULL;
+		_album = NULL;
+		_comment = NULL;
+		_genre = NULL;
+	}
 
 
 Handle<Value> TagNode::New(const Arguments& args) {
@@ -296,14 +309,6 @@ Handle<Value> TagNode::New(const Arguments& args) {
 	strcpy(cStr, *v8Str);
 	//TagNode* obj = new TagNode(args[0]->ToString());
 	TagNode* obj = new TagNode(cStr);
-
-	obj->fTitle = false;
-	obj->fArtist = false;
-	obj->fAlbum = false;
-	obj->fYear = false;
-	obj->fComment = false;
-	obj->fTrack = false;
-	obj->fGenre = false;
 
 	obj->Wrap(args.This());
 
@@ -388,7 +393,8 @@ Handle<Value> TagNode::GetTitle(Local<String> property, const AccessorInfo& info
 void TagNode::SetTitle(Local<String> property, Local<Value> value, const AccessorInfo& info) {
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
-	free(obj->_title);
+	if (obj->_title != NULL)
+		free(obj->_title);
 	v8::String::AsciiValue v8Str(value);
 	obj->_title = (char*) malloc(strlen(*v8Str) + 1);
 	strcpy(obj->_title, *v8Str);
@@ -406,7 +412,8 @@ Handle<Value> TagNode::GetArtist(Local<String> property, const AccessorInfo& inf
 void TagNode::SetArtist(Local<String> property, Local<Value> value, const AccessorInfo& info) {
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
-	free(obj->_artist);
+	if (obj->_artist != NULL)
+		free(obj->_artist);
 	v8::String::AsciiValue v8Str(value);
 	obj->_artist = (char*) malloc(strlen(*v8Str) + 1);
 	strcpy(obj->_artist, *v8Str);
@@ -424,7 +431,8 @@ Handle<Value> TagNode::GetAlbum(Local<String> property, const AccessorInfo& info
 void TagNode::SetAlbum(Local<String> property, Local<Value> value, const AccessorInfo& info) {
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
-	free(obj->_album);
+	if (obj->_album != NULL)
+		free(obj->_album);
 	v8::String::AsciiValue v8Str(value);
 	obj->_album = (char*) malloc(strlen(*v8Str) + 1);
 	strcpy(obj->_album, *v8Str);
@@ -457,7 +465,8 @@ Handle<Value> TagNode::GetComment(Local<String> property, const AccessorInfo& in
 void TagNode::SetComment(Local<String> property, Local<Value> value, const AccessorInfo& info) {
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
-	free(obj->_comment);
+	if (obj->_comment != NULL)
+		free(obj->_comment);
 	v8::String::AsciiValue v8Str(value);
 	obj->_comment = (char*) malloc(strlen(*v8Str) + 1);
 	strcpy(obj->_comment, *v8Str);
@@ -490,7 +499,8 @@ Handle<Value> TagNode::GetGenre(Local<String> property, const AccessorInfo& info
 void TagNode::SetGenre(Local<String> property, Local<Value> value, const AccessorInfo& info) {
 	HandleScope scope;
 	TagNode* obj = ObjectWrap::Unwrap<TagNode>(info.Holder());
-	free(obj->_genre);
+	if (obj->_genre != NULL)
+		free(obj->_genre);
 	v8::String::AsciiValue v8Str(value);
 	obj->_genre = (char*) malloc(strlen(*v8Str) + 1);
 	strcpy(obj->_genre, *v8Str);

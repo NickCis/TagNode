@@ -30,10 +30,24 @@ struct Baton;
 
 class TagNode : public node::ObjectWrap {
 public:
-    static v8::Persistent<v8::FunctionTemplate> constructor;
-    static void Init(v8::Handle<v8::Object> target);
+	~TagNode() {
+		//FIXME: Is it correct to do this?
+		if (_title != NULL)
+			free(_title);
+		if (_artist != NULL)
+			free(_artist);
+		if (_album != NULL)
+			free(_album);
+		if (_comment != NULL)
+			free(_comment);
+		if (_genre != NULL)
+			free(_genre);
+		free(_path);
+	};
 
-	//TODO: All setters & getters of js props
+	static v8::Persistent<v8::FunctionTemplate> constructor;
+	static void Init(v8::Handle<v8::Object> target);
+
 	static v8::Handle<v8::Value> GetTitle(v8::Local<v8::String> property, const v8::AccessorInfo& info);
 	static void SetTitle(v8::Local<v8::String> property, v8::Local<v8::Value> value, const v8::AccessorInfo& info);
 
@@ -68,7 +82,6 @@ public:
 	static void SetLength(v8::Local<v8::String> property, v8::Local<v8::Value> value, const v8::AccessorInfo& info);
 
 	//Vars made public, lazynees of coding setters
-	//TODO: Make destructor to free vars
 	char *_path;
 
 	int _tag;
